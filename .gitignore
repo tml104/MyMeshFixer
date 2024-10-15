@@ -1,0 +1,77 @@
+# Ignore build directories created by CMake
+/build/
+/build-*/
+
+# Ignore CMake specific files
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+
+# Ignore all object files, shared libraries, executable files
+*.o
+*.a
+*.so
+*.so.*
+*.exe
+
+# Ignore generated files
+*.d
+*.dSYM/
+*.dSYM.*
+*.tmp
+*.temp
+
+# Ignore Windows generated files (in case the project is also built in Windows)
+*.dll
+*.lib
+*.pdb
+
+# Ignore editor specific files (e.g., from Visual Studio Code, CLion, etc.)
+.vscode/
+.idea/
+
+# Ignore auto-generated doc files
+/docs/doxygen/
+
+# Ignore compiled JAR files in case there's some Java code integrated
+*.jar
+
+# Ignore other common unwanted temporary files
+*.swp
+*~
+
+# Ignore backup files from editors
+*.bak
+*.orig
+*.old
+*.log
+*.out
+
+# Ignore any build artifacts or dependencies
+/deps/
+external/
+third-party/
+.vendor/
+
+# Specific to CLion (JetBrains)
+cmake-build-*/
+.idea/
+
+# User-specific files
+*.user
+*.user.*
+
+# Node.js dependencies, in case Node.js projects are included
+node_modules/
+npm-debug.log
+
+# Python virtual environment
+venv/
+__pycache__/
+*.py[cod]
+
+# Ignore file generation logs or any cache files
+*.log
+*.cache

@@ -13,6 +13,8 @@
 #include <spdlog/spdlog.h>
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 
+#include "argparser.hpp"
+
 typedef OpenMesh::TriMesh_ArrayKernelT<>  MyMesh;
 
 namespace MeshUtils {
@@ -209,12 +211,11 @@ struct MeshFixer {
 };
 
 
-void Start()
+void Start(std::string input_obj_file)
 {
 	spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^%L%$] [thread %t] [%s] [%@] %v");
 
-	std::string file_name = "bunny.obj";
-	std::string output_file_name = "bunny_output.obj";
+	std::string output_obj_file = input_obj_file.substr(0, input_obj_file.length()-4) + "_output.obj";
 
 	//std::string file_name = "B_ent2(1).stl";
 	//std::string output_file_name = "B_ent2(1)_output.stl";
@@ -222,25 +223,35 @@ void Start()
 
 	MyMesh mesh;
 
-	if (!OpenMesh::IO::read_mesh(mesh, file_name))
+	if (!OpenMesh::IO::read_mesh(mesh, input_obj_file))
 	{
-		spdlog::error("Cannot read mesh from: {}", file_name);
+		spdlog::error("Cannot read mesh from: {}", input_obj_file);
 		return ;
 	}
 
 	MeshFixer meshFixer(mesh);
 	meshFixer.Start();
 
-	if (!OpenMesh::IO::write_mesh(mesh, output_file_name))
+	if (!OpenMesh::IO::write_mesh(mesh, output_obj_file))
 	{
-		spdlog::error("Cannot write mesh from: {}", file_name);
+		spdlog::error("Cannot write mesh from: {}", output_obj_file);
 		return;
 	}
 }
 
 
-int main()
+int main(int argc, char const* argv[])
 {
-	Start();
+    // parse args
+    auto args_parser = util::argparser("ObjFixer by TML104");
+    args_parser.set_program_name("MyMeshFixer")
+        .add_help_option()
+        .use_color_error()
+        .add_argument<std::string>("input_obj_file", "stl model path")
+        .parse(argc, argv);
+
+    std::string input_obj_file = args_parser.get_argument<std::string>("input_obj_file");
+
+	Start(input_obj_file);
 	return 0;
 }
