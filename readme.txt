@@ -14,3 +14,6 @@
 
 https://blog.iyatt.com/?p=5832
 build后复制依赖库：ldd MyMeshFixer | awk '{print $3}' | xargs -i cp -L {} .
+每次build后：应该只需要复制MyMesh到pack文件夹里面
+打包：zip -r pack.zip ./pack
+    - -r：递归要打包的目录

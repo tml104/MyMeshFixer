@@ -80,15 +80,36 @@ namespace MeshUtils {
 
 } // MeshUtils
 
+struct INPUT_ARGUMENTS{
+	std::string file_path;
+	double distance_threshold;
+	double angle_threshold;
+	double scale_factor;
+};
+
 struct MeshFixer {
 
-	const double VERTICES_MERGE_DISTANCE_EPSILON = 0.001; // 目前硬编码一个数值
-	const double FLIP_ANGLE_EPSILON = 150.0;  // 单位：度
+	double VERTICES_MERGE_DISTANCE_EPSILON = 0.001; // 目前硬编码一个数值
+	double FLIP_ANGLE_EPSILON = 150.0;  // 单位：度
+	double SCALE_FACTOR = 1.0;
 
 	MyMesh& mesh;
 
 	int flip_count = 0;
 	int collapse_count = 0;
+
+	/*
+		倍率缩放
+	*/
+	void ScaleOperation(){
+		spdlog::info("ScaleOperation start.");
+		for(auto vertex_it = mesh.vertices_begin(); vertex_it != mesh.vertices_end(); ++vertex_it){
+			MyMesh::Point point = mesh.point(*vertex_it);
+			point*=SCALE_FACTOR;
+			mesh.set_point(*vertex_it, point);
+		}
+		spdlog::info("ScaleOperation end.");
+	}
 
 	/*
 		折叠小于阈值的点
@@ -187,10 +208,19 @@ struct MeshFixer {
 		spdlog::info("=== Status for Mesh Operation End ===");
 	}
 
-	void Start()
+	void Start(INPUT_ARGUMENTS input_args)
 	{
 		spdlog::info("=== Before Operations ===");
+
+		VERTICES_MERGE_DISTANCE_EPSILON = input_args.distance_threshold;
+		FLIP_ANGLE_EPSILON = input_args.angle_threshold;
+		SCALE_FACTOR = input_args.scale_factor;
+
 		PrintMeshInfo();
+
+		if(SCALE_FACTOR != 1.0){
+			ScaleOperation();
+		}
 
 		CollapseVerticesOperation();
 		mesh.garbage_collection();
@@ -211,11 +241,11 @@ struct MeshFixer {
 };
 
 
-void Start(std::string input_obj_file)
+void Start(INPUT_ARGUMENTS input_args)
 {
 	spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^%L%$] [thread %t] [%s] [%@] %v");
 
-	std::string output_obj_file = input_obj_file.substr(0, input_obj_file.length()-4) + "_output.obj";
+	std::string output_file_path = input_args.file_path.substr(0, input_args.file_path.length()-4) + "_output.obj";
 
 	//std::string file_name = "B_ent2(1).stl";
 	//std::string output_file_name = "B_ent2(1)_output.stl";
@@ -223,18 +253,18 @@ void Start(std::string input_obj_file)
 
 	MyMesh mesh;
 
-	if (!OpenMesh::IO::read_mesh(mesh, input_obj_file))
+	if (!OpenMesh::IO::read_mesh(mesh, input_args.file_path))
 	{
-		spdlog::error("Cannot read mesh from: {}", input_obj_file);
+		spdlog::error("Cannot read mesh from: {}", input_args.file_path);
 		return ;
 	}
 
 	MeshFixer meshFixer(mesh);
-	meshFixer.Start();
+	meshFixer.Start(input_args);
 
-	if (!OpenMesh::IO::write_mesh(mesh, output_obj_file))
+	if (!OpenMesh::IO::write_mesh(mesh, output_file_path))
 	{
-		spdlog::error("Cannot write mesh from: {}", output_obj_file);
+		spdlog::error("Cannot write mesh from: {}", output_file_path);
 		return;
 	}
 }
@@ -248,10 +278,17 @@ int main(int argc, char const* argv[])
         .add_help_option()
         .use_color_error()
         .add_argument<std::string>("input_obj_file", "stl model path")
+		.add_option<double>("-d", "--distance","distance threshold", 0.001)
+		.add_option<double>("-a", "--angle", "angle threshold", 150)
+		.add_option<double>("-s", "--scale", "scale factor", 1.0)
         .parse(argc, argv);
 
-    std::string input_obj_file = args_parser.get_argument<std::string>("input_obj_file");
+	INPUT_ARGUMENTS input_args;
+	input_args.distance_threshold =	args_parser.get_option_double("-d");
+	input_args.angle_threshold = args_parser.get_option_double("-a");
+	input_args.scale_factor = args_parser.get_option_double("-s");
+    input_args.file_path = args_parser.get_argument<std::string>("input_obj_file");
 
-	Start(input_obj_file);
+	Start(input_args);
 	return 0;
 }
