@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <algorithm>
 
 #include <OpenMesh/Core/IO/MeshIO.hh>
 #include <OpenMesh/Core/Mesh/PolyMesh_ArrayKernelT.hh>
@@ -14,12 +15,14 @@
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 
 #include "argparser.hpp"
+#include "Timer.hpp"
 
-typedef OpenMesh::TriMesh_ArrayKernelT<>  MyMesh;
+typedef OpenMesh::TriMesh_ArrayKernelT<> MyMesh;
 
-namespace MeshUtils {
+namespace MeshUtils
+{
 
-	double CalculateAngle(const MyMesh::Point& a, const MyMesh::Point& b, const MyMesh::Point& c)
+	double CalculateAngle(const MyMesh::Point &a, const MyMesh::Point &b, const MyMesh::Point &c)
 	{
 		MyMesh::Point ab = b - a;
 		MyMesh::Point ac = c - a;
@@ -29,7 +32,7 @@ namespace MeshUtils {
 		return acos(dot_product / (norm_ab * norm_ac)) * 180.0 / M_PI;
 	}
 
-	double CalculateFaceMinAngle(MyMesh& mesh, MyMesh::FaceHandle fh)
+	double CalculateFaceMinAngle(MyMesh &mesh, MyMesh::FaceHandle fh)
 	{
 		std::vector<MyMesh::Point> points;
 		for (MyMesh::FaceVertexIter fv_it = mesh.fv_iter(fh); fv_it.is_valid(); ++fv_it)
@@ -60,11 +63,11 @@ namespace MeshUtils {
 			angles[i] = std::acos(dot_product / (length1 * length2));
 		}
 
-		double min_angle = std::min({ angles[0], angles[1], angles[2] });
+		double min_angle = std::min({angles[0], angles[1], angles[2]});
 		return min_angle * 180.0 / M_PI; // 转换为度数
 	}
 
-	double CalculateLength(MyMesh& mesh, MyMesh::HalfedgeHandle heh)
+	double CalculateLength(MyMesh &mesh, MyMesh::HalfedgeHandle heh)
 	{
 		auto v1 = mesh.from_vertex_handle(heh);
 		auto v2 = mesh.to_vertex_handle(heh);
@@ -76,24 +79,24 @@ namespace MeshUtils {
 		return length;
 	}
 
-
-
 } // MeshUtils
 
-struct INPUT_ARGUMENTS{
+struct INPUT_ARGUMENTS
+{
 	std::string file_path;
 	double distance_threshold;
 	double angle_threshold;
 	double scale_factor;
 };
 
-struct MeshFixer {
+struct MeshFixer
+{
 
 	double VERTICES_MERGE_DISTANCE_EPSILON = 0.001; // 目前硬编码一个数值
-	double FLIP_ANGLE_EPSILON = 150.0;  // 单位：度
+	double FLIP_ANGLE_EPSILON = 150.0;				// 单位：度
 	double SCALE_FACTOR = 1.0;
 
-	MyMesh& mesh;
+	MyMesh &mesh;
 
 	int flip_count = 0;
 	int collapse_count = 0;
@@ -101,11 +104,13 @@ struct MeshFixer {
 	/*
 		倍率缩放
 	*/
-	void ScaleOperation(){
+	void ScaleOperation()
+	{
 		spdlog::info("ScaleOperation start.");
-		for(auto vertex_it = mesh.vertices_begin(); vertex_it != mesh.vertices_end(); ++vertex_it){
+		for (auto vertex_it = mesh.vertices_begin(); vertex_it != mesh.vertices_end(); ++vertex_it)
+		{
 			MyMesh::Point point = mesh.point(*vertex_it);
-			point*=SCALE_FACTOR;
+			point *= SCALE_FACTOR;
 			mesh.set_point(*vertex_it, point);
 		}
 		spdlog::info("ScaleOperation end.");
@@ -152,7 +157,8 @@ struct MeshFixer {
 
 		for (auto e_it = mesh.edges_begin(); e_it != mesh.edges_end(); e_it++)
 		{
-			try {
+			try
+			{
 				MyMesh::HalfedgeHandle heh0 = mesh.halfedge_handle(*e_it, 0);
 				MyMesh::HalfedgeHandle heh1 = mesh.halfedge_handle(*e_it, 1); // 等等，是非流形怎么办？
 
@@ -165,26 +171,79 @@ struct MeshFixer {
 				double angle0 = MeshUtils::CalculateAngle(mesh.point(v2), mesh.point(v1), mesh.point(v0));
 				double angle1 = MeshUtils::CalculateAngle(mesh.point(v3), mesh.point(v1), mesh.point(v0));
 
-				if (angle0 > FLIP_ANGLE_EPSILON || angle1 > FLIP_ANGLE_EPSILON){
+				if (angle0 > FLIP_ANGLE_EPSILON || angle1 > FLIP_ANGLE_EPSILON)
+				{
 					spdlog::info("angle0: {}, angle1: {}", angle0, angle1);
 
-					if (mesh.is_flip_ok(*e_it)) {
+					if (mesh.is_flip_ok(*e_it))
+					{
 						mesh.flip(*e_it);
 						spdlog::info("fliped. flip count: {}", flip_count);
 						flip_count++;
 					}
 				}
-
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception &e)
+			{
 				spdlog::error("Caught an exception in FlipEdgesOperation: {}", e.what());
 			}
-			catch (...) {
+			catch (...)
+			{
 				spdlog::error("Caught an unknown exception in FlipEdgesOperation");
 			}
 		}
 
 		spdlog::info("FlipEdgesOperation end.");
+	}
+
+	/*
+		以直方图形式打印边长统计信息
+	*/
+	void PrintStatsForEdgeLength()
+	{
+		spdlog::info("PrintStatsForEdgeLength start.");
+
+		std::vector<double> lengths;
+
+		for (MyMesh::HalfedgeIter e_it = mesh.halfedges_begin(); e_it != mesh.halfedges_end(); ++e_it)
+		{
+			MyMesh::HalfedgeHandle heh = *e_it;
+
+			double length = MeshUtils::CalculateLength(mesh, heh);
+			lengths.emplace_back(length);
+		}
+
+		std::sort(lengths.begin(), lengths.end());
+
+		double min_length = lengths.front();
+		double max_length = lengths.back();
+
+		int part = 10;
+		
+		double delta = (max_length - min_length) / part;
+		double current_l = min_length;
+		double current_r = min_length + delta;
+		int cnt = 0;
+		
+		auto print_line = [&](){
+			spdlog::info("length_range [{} - {}): {} ({})", current_l, current_r, cnt, cnt*1.0/lengths.size());
+		};
+
+		for(auto l: lengths){
+			if(l<current_r){
+				cnt++;
+			}else{
+				print_line();
+				current_l +=delta;
+				current_r +=delta;
+				cnt = 0;
+			}
+		}
+		print_line();
+		spdlog::info("min_length: {}", min_length);
+		spdlog::info("max_length: {}", max_length);
+
+		spdlog::info("PrintStatsForEdgeLength end.");
 	}
 
 	void PrintMeshInfo()
@@ -217,8 +276,10 @@ struct MeshFixer {
 		SCALE_FACTOR = input_args.scale_factor;
 
 		PrintMeshInfo();
+		PrintStatsForEdgeLength();
 
-		if(SCALE_FACTOR != 1.0){
+		if (SCALE_FACTOR != 1.0)
+		{
 			ScaleOperation();
 		}
 
@@ -237,57 +298,61 @@ struct MeshFixer {
 		collapse_count = 0;
 	}
 
-	MeshFixer(MyMesh& mesh): mesh(mesh) {}
+	MeshFixer(MyMesh &mesh) : mesh(mesh) {}
 };
-
 
 void Start(INPUT_ARGUMENTS input_args)
 {
 	spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^%L%$] [thread %t] [%s] [%@] %v");
 
-	std::string output_file_path = input_args.file_path.substr(0, input_args.file_path.length()-4) + "_output.obj";
+	std::string output_file_path = input_args.file_path.substr(0, input_args.file_path.length() - 4) + "_output.obj";
 
 	//std::string file_name = "B_ent2(1).stl";
 	//std::string output_file_name = "B_ent2(1)_output.stl";
 
+	Timer::Timer timer;
 
 	MyMesh mesh;
 
 	if (!OpenMesh::IO::read_mesh(mesh, input_args.file_path))
 	{
 		spdlog::error("Cannot read mesh from: {}", input_args.file_path);
-		return ;
+		return;
 	}
+	timer.Split("Input Mesh");
 
 	MeshFixer meshFixer(mesh);
 	meshFixer.Start(input_args);
+	timer.Split("Process");
 
 	if (!OpenMesh::IO::write_mesh(mesh, output_file_path))
 	{
 		spdlog::error("Cannot write mesh from: {}", output_file_path);
 		return;
 	}
+	timer.Split("Output Mesh");
+
+	timer.PrintTimes();
 }
 
-
-int main(int argc, char const* argv[])
+int main(int argc, char const *argv[])
 {
-    // parse args
-    auto args_parser = util::argparser("ObjFixer by TML104");
-    args_parser.set_program_name("MyMeshFixer")
-        .add_help_option()
-        .use_color_error()
-        .add_argument<std::string>("input_obj_file", "stl model path")
-		.add_option<double>("-d", "--distance","distance threshold", 0.001)
+	// parse args
+	auto args_parser = util::argparser("ObjFixer by TML104");
+	args_parser.set_program_name("MyMeshFixer")
+		.add_help_option()
+		.use_color_error()
+		.add_argument<std::string>("input_obj_file", "stl model path")
+		.add_option<double>("-d", "--distance", "distance threshold", 0.001)
 		.add_option<double>("-a", "--angle", "angle threshold", 150)
 		.add_option<double>("-s", "--scale", "scale factor", 1.0)
-        .parse(argc, argv);
+		.parse(argc, argv);
 
 	INPUT_ARGUMENTS input_args;
-	input_args.distance_threshold =	args_parser.get_option_double("-d");
+	input_args.distance_threshold = args_parser.get_option_double("-d");
 	input_args.angle_threshold = args_parser.get_option_double("-a");
 	input_args.scale_factor = args_parser.get_option_double("-s");
-    input_args.file_path = args_parser.get_argument<std::string>("input_obj_file");
+	input_args.file_path = args_parser.get_argument<std::string>("input_obj_file");
 
 	Start(input_args);
 	return 0;
